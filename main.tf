@@ -3,9 +3,19 @@ provider "azurerm" {
   features {}
 }
 
+locals {
+  web_server_name = var.environment == "production" ? "${var.web_server_name}-prod" : "${var.web_server_name}-dev"
+  build_environment = var.environment == "production" ? "production" : "development"
+}
+
 resource "azurerm_resource_group" "web_server_rg" {
   name     = var.web_server_rg
   location = var.web_server_location
+
+  tags = {
+    environment = local.build_environment
+    build-version = var.terraform_script_version
+  }
 }
 
 resource "azurerm_virtual_network" "web_server_vnet" {
@@ -104,7 +114,7 @@ resource "azurerm_virtual_machine_scale_set" "web_server" {
   }
 
   os_profile {
-    computer_name_prefix = var.web_server_name
+    computer_name_prefix = local.web_server_name
     admin_username        = "webserver"
     admin_password        = "Passw0rd1234"
   }
@@ -117,7 +127,7 @@ resource "azurerm_virtual_machine_scale_set" "web_server" {
     primary = true
 
     ip_configuration {
-      name = var.web_server_name
+      name = local.web_server_name
       primary = true
       subnet_id = azurerm_subnet.web_server_subnet["web-server"].id
     }
