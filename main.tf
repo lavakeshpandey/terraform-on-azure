@@ -4,7 +4,7 @@ provider "azurerm" {
 }
 
 locals {
-  web_server_name = var.environment == "production" ? "${var.web_server_name}-prod" : "${var.web_server_name}-dev"
+  web_server_name   = var.environment == "production" ? "${var.web_server_name}-prod" : "${var.web_server_name}-dev"
   build_environment = var.environment == "production" ? "production" : "development"
 }
 
@@ -13,7 +13,7 @@ resource "azurerm_resource_group" "web_server_rg" {
   location = var.web_server_location
 
   tags = {
-    environment = local.build_environment
+    environment   = local.build_environment
     build-version = var.terraform_script_version
   }
 }
@@ -103,14 +103,14 @@ resource "azurerm_subnet_network_security_group_association" "web_server_sag" {
 }
 
 resource "azurerm_virtual_machine_scale_set" "web_server" {
-  name                  = "${var.resource_prefix}-scale-set"
-  location              = var.web_server_location
-  resource_group_name   = azurerm_resource_group.web_server_rg.name
-  upgrade_policy_mode   = "manual"
-  
+  name                = "${var.resource_prefix}-scale-set"
+  location            = var.web_server_location
+  resource_group_name = azurerm_resource_group.web_server_rg.name
+  upgrade_policy_mode = "manual"
+
   sku {
-    name = "Standard_B1s"
-    tier = "Standard"
+    name     = "Standard_B1s"
+    tier     = "Standard"
     capacity = var.web_server_count
   }
 
@@ -122,31 +122,45 @@ resource "azurerm_virtual_machine_scale_set" "web_server" {
   }
 
   storage_profile_os_disk {
-    name = ""
-    caching = "ReadWrite"
-    create_option = "FromImage"
+    name              = ""
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
     managed_disk_type = "Standard_LRS"
   }
 
   os_profile {
     computer_name_prefix = local.web_server_name
-    admin_username        = "webserver"
-    admin_password        = "Passw0rd1234"
+    admin_username       = "webserver"
+    admin_password       = data.azurerm_key_vault_secret.admin_password.value
   }
 
   os_profile_windows_config {
     provision_vm_agent = true
   }
   network_profile {
-    name = "web_server_network_profile"
+    name    = "web_server_network_profile"
     primary = true
 
     ip_configuration {
-      name = local.web_server_name
-      primary = true
-      subnet_id = azurerm_subnet.web_server_subnet["web-server"].id
+      name                                   = local.web_server_name
+      primary                                = true
+      subnet_id                              = azurerm_subnet.web_server_subnet["web-server"].id
       load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.web_server_lb_backend_pool.id]
     }
+  }
+
+  extension {
+    name                 = "${local.web_server_name}.extension"
+    publisher            = "Microsoft.Compute"
+    type                 = "CustomScriptExtension"
+    type_handler_version = "1.10"
+
+    settings = <<SETTINGS
+  {
+    "fileUris" : ["https://raw.githubusercontent.com/eltimmo/learning/master/azureInstallWebServer.ps1"],
+    "commandToExecute" : "powershell.exe -ExecutionPolicy Unrestricted -File azureInstallWebServer.ps1"
+  }
+  SETTINGS
   }
 }
 
@@ -158,39 +172,39 @@ resource "azurerm_virtual_machine_scale_set" "web_server" {
 #   platform_fault_domain_count = 2
 # }
 
-resource "azurerm_lb" "web_server_lb"{
-  name                  = "${var.resource_prefix}-lb"
-  location              = var.web_server_location
-  resource_group_name   = azurerm_resource_group.web_server_rg.name
+resource "azurerm_lb" "web_server_lb" {
+  name                = "${var.resource_prefix}-lb"
+  location            = var.web_server_location
+  resource_group_name = azurerm_resource_group.web_server_rg.name
 
   frontend_ip_configuration {
-    name = "${var.resource_prefix}-lb-frontend-ip"
+    name                 = "${var.resource_prefix}-lb-frontend-ip"
     public_ip_address_id = azurerm_public_ip.web_server_lb_public_ip.id
   }
 }
 
-resource "azurerm_lb_backend_address_pool" "web_server_lb_backend_pool"{
-  name                  = "${var.resource_prefix}-lb-backend-pool"
-  resource_group_name   = azurerm_resource_group.web_server_rg.name
-  loadbalancer_id = azurerm_lb.web_server_lb.id
+resource "azurerm_lb_backend_address_pool" "web_server_lb_backend_pool" {
+  name                = "${var.resource_prefix}-lb-backend-pool"
+  resource_group_name = azurerm_resource_group.web_server_rg.name
+  loadbalancer_id     = azurerm_lb.web_server_lb.id
 }
 
-resource "azurerm_lb_probe" "web_server_lb_http_probe"{
-  name = "${var.resource_prefix}-lb-http-probe"
-  resource_group_name   = azurerm_resource_group.web_server_rg.name
-  loadbalancer_id = azurerm_lb.web_server_lb.id
-  protocol = "tcp"
-  port = "80"
+resource "azurerm_lb_probe" "web_server_lb_http_probe" {
+  name                = "${var.resource_prefix}-lb-http-probe"
+  resource_group_name = azurerm_resource_group.web_server_rg.name
+  loadbalancer_id     = azurerm_lb.web_server_lb.id
+  protocol            = "tcp"
+  port                = "80"
 }
 
-resource "azurerm_lb_rule" "web_server_lb_http_rule"{
- name = "${var.resource_prefix}-lb-http-rule"
- resource_group_name   = azurerm_resource_group.web_server_rg.name
- loadbalancer_id = azurerm_lb.web_server_lb.id
- protocol = "tcp"
- frontend_port = "80"
- backend_port = "80"
- frontend_ip_configuration_name = "${var.resource_prefix}-lb-frontend-ip"
- probe_id = azurerm_lb_probe.web_server_lb_http_probe.id
- backend_address_pool_id = azurerm_lb_backend_address_pool.web_server_lb_backend_pool.id
+resource "azurerm_lb_rule" "web_server_lb_http_rule" {
+  name                           = "${var.resource_prefix}-lb-http-rule"
+  resource_group_name            = azurerm_resource_group.web_server_rg.name
+  loadbalancer_id                = azurerm_lb.web_server_lb.id
+  protocol                       = "tcp"
+  frontend_port                  = "80"
+  backend_port                   = "80"
+  frontend_ip_configuration_name = "${var.resource_prefix}-lb-frontend-ip"
+  probe_id                       = azurerm_lb_probe.web_server_lb_http_probe.id
+  backend_address_pool_id        = azurerm_lb_backend_address_pool.web_server_lb_backend_pool.id
 }
