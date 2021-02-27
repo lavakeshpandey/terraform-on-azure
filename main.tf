@@ -149,6 +149,11 @@ resource "azurerm_virtual_machine_scale_set" "web_server" {
     }
   }
 
+  boot_diagnostics {
+    enabled = true
+    storage_uri = azurerm_storage_account.storage_account.primary_blob_endpoint
+  }
+
   extension {
     name                 = "${local.web_server_name}.extension"
     publisher            = "Microsoft.Compute"
@@ -207,4 +212,12 @@ resource "azurerm_lb_rule" "web_server_lb_http_rule" {
   frontend_ip_configuration_name = "${var.resource_prefix}-lb-frontend-ip"
   probe_id                       = azurerm_lb_probe.web_server_lb_http_probe.id
   backend_address_pool_id        = azurerm_lb_backend_address_pool.web_server_lb_backend_pool.id
+}
+
+resource "azurerm_storage_account" "storage_account" {
+  name                     = "ltfbootdiagnostics"
+  location                 = var.web_server_location
+  resource_group_name      = azurerm_resource_group.web_server_rg.name
+  account_tier              = "Standard"
+  account_replication_type = "LRS"
 }
